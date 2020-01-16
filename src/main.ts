@@ -2,7 +2,8 @@ import * as yargs from 'yargs';
 import { Monitor, MqttMessageEvent } from './monitor';
 import { tap, filter, map } from 'rxjs/operators';
 import { timer } from 'rxjs';
-import { ConnectionTracker, DHCPEvent } from './ping';
+import { Pinger } from './ping';
+import { DHCPEvent, Tracker } from './tracker';
 
 yargs
   .scriptName('main.ts')
@@ -12,25 +13,12 @@ yargs
     (yargs: yargs.Argv) => {},
     (args: any) => {
       const monitor = new Monitor(args.host);
-      const devices = new Map<string, ConnectionTracker>();
+      const tracker = new Tracker();
 
-      monitor
-        .mqttEvents()
-        .pipe(
-          tap(event => console.log('New event', event)),
-          filter(event => event.type === 'MESSAGE'),
-          map((event: MqttMessageEvent) => JSON.parse(event.payload)),
-        )
-        .subscribe((msg: DHCPEvent) => {
-          if (!devices.has(msg.macaddr)) {
-            const tracker = new ConnectionTracker(msg);
-            tracker.observeConnection();
-            devices.set(msg.macaddr, tracker);
-          }
-        });
+      tracker.observeDhcp(monitor);
       monitor.monitor();
 
-      timer(60000).subscribe(() => monitor.close());
+      // timer(60000).subscribe(() => monitor.close());
       console.log('Done.');
     },
   )

@@ -1,31 +1,48 @@
-import { Subject, Observable, interval, timer } from 'rxjs';
+import { Subject, Observable, interval, timer, Subscription } from 'rxjs';
 const ping = require('net-ping');
 
-export interface DHCPEvent {
-  action: 'old' | 'new' | 'del';
+export interface ConnectionStatus {
   macaddr: string;
   ipaddr: string;
   hostname: string;
+  onlineStatus: boolean;
 }
 
-export class ConnectionTracker {
+export class Pinger {
+  private status?: boolean;
   private _status: Subject<boolean> = new Subject();
+  private subscription?: Subscription;
 
-  constructor(private dhcp: DHCPEvent) {}
+  constructor(private ipaddr: string) {}
 
   public statusChanged(): Observable<boolean> {
     return this._status.asObservable();
   }
 
   public observeConnection() {
-    timer(1000, 5000).subscribe(() => {
-      const session = ping.createSession();
-      session.pingHost(this.dhcp.ipaddr, (error: Error, target: string) => {
-        console.log(error, target);
+    this.subscription = timer(1000, 60000).subscribe(() => {
+      const session = ping.createSession({});
+      session.pingHost(this.ipaddr, (error: Error, target: string) => {
         if (error) {
-          this._status.next(false);
+          this.notify(false);
+          this.subscription?.unsubscribe();
         }
+
+        this.notify(true);
       });
     });
+  }
+
+  public stop() {
+    this.subscription?.unsubscribe();
+  }
+
+  private notify(onlineStatus: boolean) {
+    if (this.status === onlineStatus) {
+      return;
+    }
+
+    this.status = onlineStatus;
+    this._status.next(onlineStatus);
   }
 }
